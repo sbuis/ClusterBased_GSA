@@ -1,0 +1,270 @@
+---
+title: "Application of Cluster-Based GSA method to the ToyCurves model"
+author: "S. Roux (INRAE, UMR MISTEA) & S. Buis (INRAE, UMR EMMAH)"
+date: "`r Sys.Date()`"
+output: html_document
+params:
+  n: 7000
+  X6: 0.05
+  np: 200
+  nbClust: 3
+---
+
+
+**Faire une fonction pour plot**
+**Uniformiser les noms des indices**
+**Revoir le code**
+**Valider les graphes**
+**Commenter**
+
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+n <- params$n
+X6<- params$X6
+np <- params$np
+nbClust <- params$nbClust
+```
+
+# Introduction
+
+This document provides the code that has been applied to obtain the results of the Cluster-Based GSA method on the ToyCurves model presented in Roux, Buis et al. **(REFERENCE ARXIV A AJOUTER)**
+
+Main parameters can be changed using the Rstudio "Knit with parameters ..." menu Bar:
+
+* n: the sample size for the Sensitivity Analysis Design-Of-Experiment
+* X6: the ToyCurves parameter that controls the magnitude of the shift of the two triangles   (0.05 corresponds to setting 1 in Roux, Buis et al., and 0.08 to setting 2)
+* np: the number of points on which the curves are discretized
+* nbClust: the number of clusters
+
+
+# Initializations
+
+```{r, warning=FALSE, echo=FALSE}
+if(!require("sensitivity")){
+  install.packages("sensitivity")
+  library("sensitivity")
+}
+if(!require("lhs")){
+  install.packages("lhs")
+  library("lhs")
+}
+if(!require("fclust")){
+  install.packages("fclust")
+  library("fclust")
+}
+
+```
+
+# ToyCurves model
+
+The TC model has six parameters and produces on the $[0,1]$ interval a curve defined as a sum of a vertical offset plus two shifted triangles. As can be seen on Fig. \ref{fig_toycurve}, parameter $X_1$ drives the height of the first triangle while two parameters $(X_1,X_2)$ drive the height of the second in an interacting way. Their abscissas are centered respectively at $t=0.15$ and $t=0.75$ with perturbations controlled by parameters $(X_4,X_6)$ for Triangle $1$ and $(X_5,X_6)$ for Triangle $2$. Parameter $X_3$ controls the height of the global shift. 
+
+```{r}
+# Triangle function
+trg <- function(x,y,w,np=100)
+  # x: position of the triangle's peak on the x-axis
+  # y: position of the triangle's peak on the y-axis
+  # w: factor that controls the width of the triangle 
+  # np: number of points on which the triangle is mapped along the x-axis 
+{
+  t = seq(0,1,length.out=np)
+  res = y*(1-pmin(1,abs(t-x)/w))
+  return(res)
+}
+
+# ToyCurves
+ToyCurves <- function(X1, X2, X3, X4, X5, X6, np=100)
+  # X1: position of the first triangle's peak on the y-axis  
+  # X2: position of the second triangle's peak on the y-axis  
+  # X3: height of the global shift  
+  # X4: controls horizontal shift of the first triangle  
+  # X5: controls horizontal shift of the second triangle   
+  # X6: multiplicative factor applied on the shift of both first and second triangles  
+{
+	res = seq(0,1,length.out=np)
+	return( rep(0,np)+X3/5.0+ trg(0.25+(2*(X4-0.5))*X6,X1,0.15,np)+(X2>0.5)*(X1>0.5)*trg(0.75+(2*(X5-0.5))*X6,2*(X2-0.5),0.15,np) )
+}
+```
+
+# Samples generation
+
+```{r}
+set.seed(12345)
+
+# DoE generated using SobolJansen
+paramNames <- c('X1','X2','X3','X4','X5')
+nbParam <- length(paramNames)
+X1 <- randomLHS(n,5); colnames(X1) <- paramNames
+X2 <- randomLHS(n,5); colnames(X2) <- paramNames
+gsa = soboljansen(model = NULL, X1, X2,  nboot=100, conf = 0.95)
+
+# propagate with toy-curves
+ntot <-  (dim(gsa$X)[1])
+m <- matrix(nrow=ntot,ncol=np)
+for (i in 1:ntot)
+{
+m[i,] <-ToyCurves(X1=gsa$X[i,1], X2=gsa$X[i,2], X3=gsa$X[i,3], X4=gsa$X[i,4],
+                   X5=gsa$X[i,5], X6=X6, np=np)
+}
+
+# plot (a sub-set of) the generated curves
+nc <- 100 # number of curves to plot 
+plot(c(0,1),c(0,1.2),typ='n',xlab='',ylab='')
+for (i in 1:nc)
+{
+lines(seq(0,1,length.out=200),m[i,],lwd=1,col=grey(i/(1.3*nc)))
+}
+```
+# Curves clustering
+
+```{r}
+clust <- FKM(m,k=nbClust)
+u <- clust$U
+centers <- data.frame(matrix(nrow=nbClust,ncol=np))
+for (k in 1:nbClust)
+  centers[k,]= apply( (m*(u[,k]^2)),2 ,sum) / sum(u[,k]^2)
+
+
+nc <- 100 # number of curves to plot 
+gr <- 0.0
+col_base <- rep(gray(gr),nbClust)
+for (cl in 1:nbClust)
+{
+	plot(c(0,1),c(0,1.2),typ='n',xlab='',main=sprintf("Cluster %d",cl))
+	for (i in 1:nc)
+		lines(seq(0,1,length.out=200),m[i,],lwd=2,col= adjustcolor(col_base[cl], alpha.f = u[i,cl]^2))
+	lines(seq(0,1,length.out=200),centers[cl,],lty=1,lwd=4,ylim=c(0,1),col='white')
+	grid(col='black')
+}
+
+```
+
+
+# Clust-SI indices
+
+```{r}
+Clust_SI <- vector("list",nbClust)
+for (cl in 1:nbClust)
+  Clust_SI[[cl]] <- tell(gsa, y=u[,cl])
+
+for (cl in 1:nbClust) {
+  b <-  barplot(rbind(Clust_SI[[cl]]$T[,1],Clust_SI[[cl]]$S[,1]), 
+                beside=TRUE, ylim=c(0,1), col=c(gray(0.5),'white'), 
+                names.arg=paramNames, main=paste0("Cluster ",cl), 
+                legend.text=c("TSI",expression(SI[1])))
+  for (i in 1:nbParam)
+  {
+    segments(b[2*i-1],Clust_SI[[cl]]$T[i,4],b[2*i-1],Clust_SI[[cl]]$T[i,5])
+    segments(b[2*i],Clust_SI[[cl]]$S[i,4],b[2*i],Clust_SI[[cl]]$S[i,5])
+  }
+  
+}
+```
+
+
+# dClust-SI indices
+
+```{r}
+comb <- combn(nbClust,2)
+nbComb <- ncol(comb)
+dClust_SI <- vector("list",nbComb)
+
+for (icomb in 1:nbComb)
+  dClust_SI[[icomb]] <- tell(gsa, y=u[,comb[1,icomb]]-u[,comb[2,icomb]])
+
+for (icomb in 1:nbComb) {
+  b <-  barplot(rbind(dClust_SI[[icomb]]$T[,1],dClust_SI[[icomb]]$S[,1]), 
+                beside=TRUE, ylim=c(0,1), col=c(gray(0.5),'white'), 
+                names.arg=paramNames, main=paste0("Direction ",comb[1,icomb],"-",comb[2,icomb]), 
+                legend.text=c("TSI",expression(SI[1])))
+  for (i in 1:nbParam)
+  {
+    segments(b[2*i-1],dClust_SI[[icomb]]$T[i,4],b[2*i-1],dClust_SI[[icomb]]$T[i,5])
+    segments(b[2*i],dClust_SI[[icomb]]$S[i,4],b[2*i],dClust_SI[[icomb]]$S[i,5])
+  }
+  
+}
+```
+
+
+# Clust-GSI indices
+
+```{r, warning=FALSE}
+compute_GSI <- function(V, Si1, T, paramNames) {
+  nbParam <- nrow(Si1)
+  np <- length(V)
+  GSI <- list(Si1=rep(NA,nbParam), ST=rep(NA,nbParam))
+  for (i in 1:nbParam) {
+    GSI$Si1[i] <- sum(V * Si1[i,]) / sum(V)
+    GSI$ST[i] <- sum(V * T[i,]) / sum(V)
+  }
+  
+  names(GSI$Si1) <- paramNames
+  names(GSI$ST) <- paramNames
+  return(GSI)
+}
+
+dyn_V <- rep(NA,np); dyn_Si1 <- data.frame(matrix(nrow=nbParam,ncol=np))
+dyn_T <- data.frame(matrix(nrow=nbParam,ncol=np))
+for (i in 1:np) {
+  res_tmp <- tell(gsa, y=m[,i])
+  dyn_V[i]=res_tmp$V[1,1]
+  dyn_Si1[,i] = res_tmp$S[,1]
+  dyn_T[,i] = res_tmp$T[,1]
+}
+
+GSI <- compute_GSI(dyn_V, dyn_Si1, dyn_T, paramNames)
+
+nboot=100
+GSI_boot <- vector("list",nboot)
+for (iboot in 1:nboot)
+{
+  bt_idx=sample(n,size=n,replace=TRUE)
+  
+  x1_bt=X1[bt_idx,]
+  x2_bt=X2[bt_idx,]
+  
+  gsa_boot = soboljansen(model = NULL, X1= x1_bt, X2 = x2_bt)
+  idx_in_m = match(data.frame(t(gsa_boot$X)), data.frame(t(gsa$X)))
+  
+  m_bt = m[idx_in_m,]
+  for (i in 1:np)
+  {
+    res_tmp = tell(gsa_boot, y=m_bt[,i]) 
+    dyn_V[i]=res_tmp$V[1,1]
+    dyn_Si1[,i] = res_tmp$S[,1]
+    dyn_T[,i] = res_tmp$T[,1]
+  }
+  
+  GSI_boot[[iboot]] <- compute_GSI(dyn_V, dyn_Si1, dyn_T, paramNames)
+  
+}
+
+# quantiles computation
+GSI$Si1_CI95pcMin <- setNames(rep(NA,nbParam), paramNames); GSI$Si1_CI95pcMax <- setNames(rep(NA,nbParam), paramNames)
+GSI$ST_CI95pcMin <- setNames(rep(NA,nbParam), paramNames); GSI$ST_CI95pcMax <- setNames(rep(NA,nbParam), paramNames)
+for (i in 1:nbParam)
+{
+  GSI$Si1_CI95pcMin[i] = quantile(sapply(GSI_boot,`[[`,"Si1")[i,],0.025)
+  GSI$Si1_CI95pcMax[i] = quantile(sapply(GSI_boot,`[[`,"Si1")[i,],0.975)
+  GSI$ST_CI95pcMin[i] = quantile(sapply(GSI_boot,`[[`,"ST")[i,],0.025)
+  GSI$ST_CI95pcMax[i] = quantile(sapply(GSI_boot,`[[`,"ST")[i,],0.975)
+  
+}
+
+
+{b <-  barplot(rbind(GSI$ST,GSI$Si1), 
+              beside=TRUE, ylim=c(0,1), col=c(gray(0.5),'white'), 
+              names.arg=paramNames, main=paste0("GSI"), 
+              legend.text=c("TSI",expression(SI[1])))
+for (i in 1:nbParam)
+{
+  segments(b[2*i-1],GSI$ST_CI95pcMin[i],b[2*i-1],GSI$ST_CI95pcMax[i])
+  segments(b[2*i],GSI$Si1_CI95pcMin[i],b[2*i],GSI$Si1_CI95pcMax[i])
+}}
+
+
+```
+
+

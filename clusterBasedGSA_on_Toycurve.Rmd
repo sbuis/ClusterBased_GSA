@@ -87,6 +87,31 @@ ToyCurves <- function(X1, X2, X3, X4, X5, X6, np=100)
 }
 ```
 
+# Plot function
+
+Just a simple function to plot indices with error bars (created for GSI indices since no plot function exists for this one ... but we also use it here for all other indices for sake of homogeneity).
+
+```{r}
+plot_indices <- function(Si1, ST, lowCI_Si1, upCI_Si1, lowCI_ST, upCI_ST, graph_title="") {
+  # Si1: vector of main Sobol' indices for each parameter
+  # ST: vector of total Sobol' indices for each parameter
+  # lowCI_Si1: vector of lower confidence interval for main Sobol' indices for each parameter
+  # upCI_Si1: vector of upper confidence interval for main Sobol' indices for each parameter
+  # lowCI_ST: vector of lower confidence interval for total Sobol' indices for each parameter
+  # upCI_ST: vector of upper confidence interval for total Sobol' indices for each parameter
+  b <-  barplot(rbind(ST,Si1), 
+                beside=TRUE, ylim=c(0,1), col=c(gray(0.5),'white'), 
+                names.arg=paramNames, main=graph_title, 
+                legend.text=c("TSI",expression(SI[1])))
+  for (i in 1:nbParam)
+  {
+    segments(b[2*i-1],lowCI_ST[i],b[2*i-1],upCI_ST[i])
+    segments(b[2*i],lowCI_Si1[i],b[2*i],upCI_Si1[i])
+  }
+}
+```
+
+
 # Samples generation
 
 ```{r}
@@ -145,20 +170,12 @@ for (cl in 1:nbClust)
 
 ```{r}
 Clust_SI <- vector("list",nbClust)
-for (cl in 1:nbClust)
-  Clust_SI[[cl]] <- tell(gsa, y=u[,cl])
-
 for (cl in 1:nbClust) {
-  b <-  barplot(rbind(Clust_SI[[cl]]$T[,1],Clust_SI[[cl]]$S[,1]), 
-                beside=TRUE, ylim=c(0,1), col=c(gray(0.5),'white'), 
-                names.arg=paramNames, main=paste0("Cluster ",cl), 
-                legend.text=c("TSI",expression(SI[1])))
-  for (i in 1:nbParam)
-  {
-    segments(b[2*i-1],Clust_SI[[cl]]$T[i,4],b[2*i-1],Clust_SI[[cl]]$T[i,5])
-    segments(b[2*i],Clust_SI[[cl]]$S[i,4],b[2*i],Clust_SI[[cl]]$S[i,5])
-  }
-  
+  Clust_SI <- tell(gsa, y=u[,cl])
+  plot_indices(Si1=Clust_SI$S[,1], ST=Clust_SI$T[,1], 
+               lowCI_Si1=Clust_SI$S[i,4], upCI_Si1=Clust_SI$S[i,5], 
+               lowCI_ST=Clust_SI$T[i,4], upCI_ST=Clust_SI$T[i,5], 
+               graph_title=paste0("Cluster",cl))
 }
 ```
 
@@ -170,20 +187,12 @@ comb <- combn(nbClust,2)
 nbComb <- ncol(comb)
 dClust_SI <- vector("list",nbComb)
 
-for (icomb in 1:nbComb)
-  dClust_SI[[icomb]] <- tell(gsa, y=u[,comb[1,icomb]]-u[,comb[2,icomb]])
-
 for (icomb in 1:nbComb) {
-  b <-  barplot(rbind(dClust_SI[[icomb]]$T[,1],dClust_SI[[icomb]]$S[,1]), 
-                beside=TRUE, ylim=c(0,1), col=c(gray(0.5),'white'), 
-                names.arg=paramNames, main=paste0("Direction ",comb[1,icomb],"-",comb[2,icomb]), 
-                legend.text=c("TSI",expression(SI[1])))
-  for (i in 1:nbParam)
-  {
-    segments(b[2*i-1],dClust_SI[[icomb]]$T[i,4],b[2*i-1],dClust_SI[[icomb]]$T[i,5])
-    segments(b[2*i],dClust_SI[[icomb]]$S[i,4],b[2*i],dClust_SI[[icomb]]$S[i,5])
-  }
-  
+  dClust_SI <- tell(gsa, y=u[,comb[1,icomb]]-u[,comb[2,icomb]])
+  plot_indices(Si1=dClust_SI$S[,1], ST=dClust_SI$T[,1], 
+               lowCI_Si1=dClust_SI$S[i,4], upCI_Si1=dClust_SI$S[i,5], 
+               lowCI_ST=dClust_SI$T[i,4], upCI_ST=dClust_SI$T[i,5], 
+               graph_title=paste0("Direction ",comb[1,icomb],"-",comb[2,icomb]))
 }
 ```
 
@@ -191,18 +200,15 @@ for (icomb in 1:nbComb) {
 # Clust-GSI indices
 
 ```{r, warning=FALSE}
-compute_GSI <- function(V, Si1, T, paramNames) {
-  nbParam <- nrow(Si1)
-  np <- length(V)
-  GSI <- list(Si1=rep(NA,nbParam), ST=rep(NA,nbParam))
-  for (i in 1:nbParam) {
-    GSI$Si1[i] <- sum(V * Si1[i,]) / sum(V)
-    GSI$ST[i] <- sum(V * T[i,]) / sum(V)
-  }
+compute_GSI <- function(V, Si1, ST, paramNames) {
+  # Computes GSI indices from a set of Sobol' indices computed for each time-step of a dynamic output
+  # V: vector of variances (one value per time-step)
+  # Si1: data.frame containing the Sobol' main indices per parameter (row) and time-step
+  # ST: data.frame containing the Sobol' total indices per parameter (row) and time-step (column)
+
+  clust_GSI <- list(Si1=setNames(sapply(1:nbParam,function(x) sum(V * Si1[x,]) / sum(V)), paramNames),
+                    ST=setNames(sapply(1:nbParam,function(x) sum(V * ST[x,]) / sum(V)), paramNames))
   
-  names(GSI$Si1) <- paramNames
-  names(GSI$ST) <- paramNames
-  return(GSI)
 }
 
 dyn_V <- rep(NA,np); dyn_Si1 <- data.frame(matrix(nrow=nbParam,ncol=np))
@@ -214,7 +220,7 @@ for (i in 1:np) {
   dyn_T[,i] = res_tmp$T[,1]
 }
 
-GSI <- compute_GSI(dyn_V, dyn_Si1, dyn_T, paramNames)
+clust_GSI <- compute_GSI(dyn_V, dyn_Si1, dyn_T, paramNames)
 
 nboot=100
 GSI_boot <- vector("list",nboot)
@@ -222,16 +228,12 @@ for (iboot in 1:nboot)
 {
   bt_idx=sample(n,size=n,replace=TRUE)
   
-  x1_bt=X1[bt_idx,]
-  x2_bt=X2[bt_idx,]
-  
-  gsa_boot = soboljansen(model = NULL, X1= x1_bt, X2 = x2_bt)
+  gsa_boot = soboljansen(model = NULL, X1= X1[bt_idx,], X2 = X2[bt_idx,])
   idx_in_m = match(data.frame(t(gsa_boot$X)), data.frame(t(gsa$X)))
   
-  m_bt = m[idx_in_m,]
   for (i in 1:np)
   {
-    res_tmp = tell(gsa_boot, y=m_bt[,i]) 
+    res_tmp = tell(gsa_boot, y=m_bt[idx_in_m,i]) 
     dyn_V[i]=res_tmp$V[1,1]
     dyn_Si1[,i] = res_tmp$S[,1]
     dyn_T[,i] = res_tmp$T[,1]
@@ -242,28 +244,21 @@ for (iboot in 1:nboot)
 }
 
 # quantiles computation
-GSI$Si1_CI95pcMin <- setNames(rep(NA,nbParam), paramNames); GSI$Si1_CI95pcMax <- setNames(rep(NA,nbParam), paramNames)
-GSI$ST_CI95pcMin <- setNames(rep(NA,nbParam), paramNames); GSI$ST_CI95pcMax <- setNames(rep(NA,nbParam), paramNames)
+clust_GSI$Si1_CI95pcMin <- setNames(rep(NA,nbParam), paramNames); GSI$Si1_CI95pcMax <- setNames(rep(NA,nbParam), paramNames)
+clust_GSI$ST_CI95pcMin <- setNames(rep(NA,nbParam), paramNames); GSI$ST_CI95pcMax <- setNames(rep(NA,nbParam), paramNames)
 for (i in 1:nbParam)
 {
-  GSI$Si1_CI95pcMin[i] = quantile(sapply(GSI_boot,`[[`,"Si1")[i,],0.025)
-  GSI$Si1_CI95pcMax[i] = quantile(sapply(GSI_boot,`[[`,"Si1")[i,],0.975)
-  GSI$ST_CI95pcMin[i] = quantile(sapply(GSI_boot,`[[`,"ST")[i,],0.025)
-  GSI$ST_CI95pcMax[i] = quantile(sapply(GSI_boot,`[[`,"ST")[i,],0.975)
+  clust_GSI$Si1_CI95pcMin[i] = quantile(sapply(GSI_boot,`[[`,"Si1")[i,],0.025)
+  clust_GSI$Si1_CI95pcMax[i] = quantile(sapply(GSI_boot,`[[`,"Si1")[i,],0.975)
+  clust_GSI$ST_CI95pcMin[i] = quantile(sapply(GSI_boot,`[[`,"ST")[i,],0.025)
+  clust_GSI$ST_CI95pcMax[i] = quantile(sapply(GSI_boot,`[[`,"ST")[i,],0.975)
   
 }
 
-
-{b <-  barplot(rbind(GSI$ST,GSI$Si1), 
-              beside=TRUE, ylim=c(0,1), col=c(gray(0.5),'white'), 
-              names.arg=paramNames, main=paste0("GSI"), 
-              legend.text=c("TSI",expression(SI[1])))
-for (i in 1:nbParam)
-{
-  segments(b[2*i-1],GSI$ST_CI95pcMin[i],b[2*i-1],GSI$ST_CI95pcMax[i])
-  segments(b[2*i],GSI$Si1_CI95pcMin[i],b[2*i],GSI$Si1_CI95pcMax[i])
-}}
-
+plot_indices(Si1=clust_GSI$Si1, ST=clust_GSI$ST, 
+             lowCI_Si1=clust_GSI$Si1_CI95pcMin, upCI_Si1=clust_GSI$Si1_CI95pcMax, 
+             lowCI_ST=clust_GSI$ST_CI95pcMin, upCI_ST=clust_GSI$ST_CI95pcMax, 
+             graph_title="clust_GSI")
 
 ```
 

@@ -1,42 +1,31 @@
----
-title: "Application of Cluster-Based GSA method to the ToyCurves model"
-author: "S. Roux (INRAE, UMR MISTEA) & S. Buis (INRAE, UMR EMMAH)"
-date: "`r Sys.Date()`"
-output: github_document
-params:
-  n: 100
-  X6: 0.05
-  np: 200
-  nbClust: 3
----
+Application of Cluster-Based GSA method to the ToyCurves model
+================
+S. Roux (INRAE, UMR MISTEA) & S. Buis (INRAE, UMR EMMAH)
+2020-08-17
 
 **Régler conv et/ou maxit dans FKM pour réduire le temps de calcul**
 **Valider les graphes**
 
-
-```{r Define parameters, include=FALSE}
-knitr::opts_chunk$set(echo = TRUE)
-n <- params$n
-X6<- params$X6
-np <- params$np
-nbClust <- params$nbClust
-```
-
 # Introduction
 
-This document provides the code of the Cluster-Based GSA method applied on the ToyCurves model as presented in (Roux, Buis et al., submitted to ENVIRON. MODELL. SOFTW.)
+This document provides the code of the Cluster-Based GSA method applied
+on the ToyCurves model as presented in Roux, Buis et al. (submitted to
+ENVIRON. MODELL. SOFTW.)
 
-Main parameters can be changed using the Rstudio "Knit with parameters ..." menu Bar:
+Main parameters can be changed using the Rstudio “Knit with parameters
+…” menu Bar:
 
-* n: the sample size for the Sensitivity Analysis Design-Of-Experiment (decreasing it may dramatically lower the computation time)
-* X6: ToyCurves parameter that controls the magnitude of the shift of the two triangles (0.05 corresponds to setting 1 in Roux, Buis et al., and 0.08 to setting 2)
-* np: the number of points on which the curves are discretized
-* nbClust: the number of clusters
-
+  - n: the sample size for the Sensitivity Analysis Design-Of-Experiment
+    (decreasing it may dramatically lower the computation time)
+  - X6: ToyCurves parameter that controls the magnitude of the shift of
+    the two triangles (0.05 corresponds to setting 1 in Roux, Buis et
+    al., and 0.08 to setting 2)
+  - np: the number of points on which the curves are discretized
+  - nbClust: the number of clusters
 
 # Install and load useful packages
 
-```{r Install and load packages, message=FALSE, warning=FALSE}
+``` r
 if(!require("knitr")){
   install.packages("knitr")
   library("knitr")
@@ -53,20 +42,22 @@ if(!require("fclust")){
   install.packages("fclust")
   library("fclust")
 }
-
 ```
 
 # ToyCurves model
 
-The ToyCurves model has six parameters and produces a curve, on the [0,1] interval, defined as a sum of a vertical offset plus two shifted triangles. As can be seen on Fig. 1, parameter X_1 drives the height of the first triangle while two parameters (X_1,X_2) drive the height of the second one in an interacting way. Their abscissas are centered respectively at t=0.15 and t=0.75 with perturbations controlled by parameters (X_4,X_6) for Triangle 1 and (X_5,X_6) for Triangle 2. Parameter X_3 controls the height of the global shift. 
+The ToyCurves model has six parameters and produces a curve, on the
+\[0,1\] interval, defined as a sum of a vertical offset plus two shifted
+triangles. As can be seen on Fig. 1, parameter X\_1 drives the height of
+the first triangle while two parameters (X\_1,X\_2) drive the height of
+the second one in an interacting way. Their abscissas are centered
+respectively at t=0.15 and t=0.75 with perturbations controlled by
+parameters (X\_4,X\_6) for Triangle 1 and (X\_5,X\_6) for Triangle 2.
+Parameter X\_3 controls the height of the global shift.
 
+<img src="toycurve_fig.png" title="Figure 1. The  ToyCurves  model  (A)  and  some  samples  for  two  parameter  settings;  Setting  1:small t-shift (B), Setting 2:  large t-shift (C)." alt="Figure 1. The  ToyCurves  model  (A)  and  some  samples  for  two  parameter  settings;  Setting  1:small t-shift (B), Setting 2:  large t-shift (C)." style="display: block; margin: auto;" />
 
-```{r, echo = FALSE, message=FALSE, fig.align='center', fig.cap='Figure 1. The  ToyCurves  model  (A)  and  some  samples  for  two  parameter  settings;  Setting  1:small t-shift (B), Setting 2:  large t-shift (C).'}
-knitr::include_graphics("toycurve_fig.png")
-```
-
-
-```{r Toycurve model}
+``` r
 # Triangle function
 trg <- function(x,y,w,np=100)
   # x: position of the triangle's peak on the x-axis
@@ -88,16 +79,18 @@ ToyCurves <- function(X1, X2, X3, X4, X5, X6, np=100)
   # X5: controls horizontal shift of the second triangle   
   # X6: multiplicative factor applied on the shift of both first and second triangles  
 {
-	res = seq(0,1,length.out=np)
-	return( rep(0,np)+X3/5.0+ trg(0.25+(2*(X4-0.5))*X6,X1,0.15,np)+(X2>0.5)*(X1>0.5)*trg(0.75+(2*(X5-0.5))*X6,2*(X2-0.5),0.15,np) )
+    res = seq(0,1,length.out=np)
+    return( rep(0,np)+X3/5.0+ trg(0.25+(2*(X4-0.5))*X6,X1,0.15,np)+(X2>0.5)*(X1>0.5)*trg(0.75+(2*(X5-0.5))*X6,2*(X2-0.5),0.15,np) )
 }
 ```
 
 # Plot function
 
-Just a simple function to plot indices with error bars (created for GSI indices since no plot function exists for this one ... but we also use it here for all other indices for sake of homogeneity).
+Just a simple function to plot indices with error bars (created for GSI
+indices since no plot function exists for this one … but we also use it
+here for all other indices for sake of homogeneity).
 
-```{r Plot function}
+``` r
 plot_indices <- function(Si1, ST, lowCI_Si1, upCI_Si1, lowCI_ST, upCI_ST, graph_title="") {
   # Si1: vector of main Sobol' indices for each parameter
   # ST: vector of total Sobol' indices for each parameter
@@ -119,10 +112,9 @@ plot_indices <- function(Si1, ST, lowCI_Si1, upCI_Si1, lowCI_ST, upCI_ST, graph_
 }
 ```
 
-
 # Samples generation
 
-```{r Generate Design of Experiment}
+``` r
 set.seed(12345)
 
 # DoE generated using SobolJansen
@@ -150,11 +142,15 @@ for (i in 1:nc)
 }
 ```
 
+![](clusterBasedGSA_on_Toycurve_files/figure-gfm/Generate%20Design%20of%20Experiment-1.png)<!-- -->
+
 # Curves clustering
 
-Cluster  centers  are  drawn  as  bold  white  curves. Simulated curves are represented with a grey level depending on their membership level to a given cluster (black = high membership, light grey = low membership).
+Cluster centers are drawn as bold white curves. Simulated curves are
+represented with a grey level depending on their membership level to a
+given cluster (black = high membership, light grey = low membership).
 
-```{r Clustering}
+``` r
 clust <- FKM(curves,k=nbClust,conv=1e-3, maxit=50)
 u <- clust$U # Membership functions
 centers <- data.frame(matrix(nrow=nbClust,ncol=np)) # clusters' centers
@@ -167,19 +163,19 @@ gr <- 0.0
 col_base <- rep(gray(gr),nbClust)
 for (cl in 1:nbClust)
 {
-	plot(c(0,1),c(0,1.2),typ='n',xlab='',main=sprintf("Cluster %d",cl))
-	for (i in 1:nc)
-		lines(seq(0,1,length.out=200),curves[i,],lwd=2,col= adjustcolor(col_base[cl], alpha.f = u[i,cl]^2))
-	lines(seq(0,1,length.out=200),centers[cl,],lty=1,lwd=4,ylim=c(0,1),col='white')
-	grid(col='black')
+    plot(c(0,1),c(0,1.2),typ='n',xlab='',main=sprintf("Cluster %d",cl))
+    for (i in 1:nc)
+        lines(seq(0,1,length.out=200),curves[i,],lwd=2,col= adjustcolor(col_base[cl], alpha.f = u[i,cl]^2))
+    lines(seq(0,1,length.out=200),centers[cl,],lty=1,lwd=4,ylim=c(0,1),col='white')
+    grid(col='black')
 }
-
 ```
 
+![](clusterBasedGSA_on_Toycurve_files/figure-gfm/Clustering-1.png)<!-- -->![](clusterBasedGSA_on_Toycurve_files/figure-gfm/Clustering-2.png)<!-- -->![](clusterBasedGSA_on_Toycurve_files/figure-gfm/Clustering-3.png)<!-- -->
 
 # Sensitivity indices on membership functions
 
-```{r Clust-SI indices}
+``` r
 Clust_SI <- vector("list",nbClust)
 for (cl in 1:nbClust) {
   Clust_SI <- tell(gsa, y=u[,cl])
@@ -190,10 +186,11 @@ for (cl in 1:nbClust) {
 }
 ```
 
+![](clusterBasedGSA_on_Toycurve_files/figure-gfm/Clust-SI%20indices-1.png)<!-- -->![](clusterBasedGSA_on_Toycurve_files/figure-gfm/Clust-SI%20indices-2.png)<!-- -->![](clusterBasedGSA_on_Toycurve_files/figure-gfm/Clust-SI%20indices-3.png)<!-- -->
 
-# Sensitivity  indices on the difference between two membership functions 
+# Sensitivity indices on the difference between two membership functions
 
-```{r dClust-SI indices}
+``` r
 comb <- combn(nbClust,2) # computes the different combinations of 2 clusters among nbClust
 nbComb <- ncol(comb)
 dClust_SI <- vector("list",nbComb)
@@ -207,10 +204,11 @@ for (icomb in 1:nbComb) {
 }
 ```
 
+![](clusterBasedGSA_on_Toycurve_files/figure-gfm/dClust-SI%20indices-1.png)<!-- -->![](clusterBasedGSA_on_Toycurve_files/figure-gfm/dClust-SI%20indices-2.png)<!-- -->![](clusterBasedGSA_on_Toycurve_files/figure-gfm/dClust-SI%20indices-3.png)<!-- -->
 
-# GSI  on  the  vector  of  membership  functions
+# GSI on the vector of membership functions
 
-```{r Clust-GSI indices}
+``` r
 compute_GSI <- function(V, Si1, ST, paramNames) {
   # Function that computes GSI indices from a set of Sobol' indices computed for each time-step of a dynamic output
   # V: vector of variances (one value per time-step)
@@ -272,7 +270,6 @@ plot_indices(Si1=clust_GSI$Si1, ST=clust_GSI$ST,
              lowCI_Si1=clust_GSI$Si1_CI95pcMin, upCI_Si1=clust_GSI$Si1_CI95pcMax, 
              lowCI_ST=clust_GSI$ST_CI95pcMin, upCI_ST=clust_GSI$ST_CI95pcMax, 
              graph_title="Cluster-based  GSI")
-
 ```
 
-
+![](clusterBasedGSA_on_Toycurve_files/figure-gfm/Clust-GSI%20indices-1.png)<!-- -->

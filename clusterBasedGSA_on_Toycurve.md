@@ -1,7 +1,7 @@
 Application of Cluster-Based GSA method to the ToyCurves model
 ================
 S. Roux (INRAE, UMR MISTEA) & S. Buis (INRAE, UMR EMMAH)
-2020-08-17
+2020-08-18
 
 **Régler conv et/ou maxit dans FKM pour réduire le temps de calcul**
 **Valider les graphes**
@@ -9,7 +9,7 @@ S. Roux (INRAE, UMR MISTEA) & S. Buis (INRAE, UMR EMMAH)
 # Introduction
 
 This document provides the code of the Cluster-Based GSA method applied
-on the ToyCurves model as presented in Roux, Buis et al. (submitted to
+on the ToyCurves model as presented in (Roux, Buis et al., submitted to
 ENVIRON. MODELL. SOFTW.)
 
 Main parameters can be changed using the Rstudio “Knit with parameters

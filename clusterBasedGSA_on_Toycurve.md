@@ -1,10 +1,7 @@
 Application of Cluster-Based GSA method to the ToyCurves model
 ================
 S. Roux (INRAE, UMR MISTEA) & S. Buis (INRAE, UMR EMMAH)
-2020-08-18
-
-**Régler conv et/ou maxit dans FKM pour réduire le temps de calcul**
-**Valider les graphes**
+2020-08-19
 
 # Introduction
 
@@ -16,7 +13,8 @@ Main parameters can be changed using the Rstudio “Knit with parameters
 …” menu Bar:
 
   - n: the sample size for the Sensitivity Analysis Design-Of-Experiment
-    (decreasing it may dramatically lower the computation time)
+    (decreasing it may dramatically lower the computation time but may
+    increase uncertainty of sensitivity indices)
   - X6: ToyCurves parameter that controls the magnitude of the shift of
     the two triangles (0.05 corresponds to setting 1 in Roux, Buis et
     al., and 0.08 to setting 2)
@@ -55,7 +53,18 @@ respectively at t=0.15 and t=0.75 with perturbations controlled by
 parameters (X\_4,X\_6) for Triangle 1 and (X\_5,X\_6) for Triangle 2.
 Parameter X\_3 controls the height of the global shift.
 
-<img src="toycurve_fig.png" title="Figure 1. The  ToyCurves  model  (A)  and  some  samples  for  two  parameter  settings;  Setting  1:small t-shift (B), Setting 2:  large t-shift (C)." alt="Figure 1. The  ToyCurves  model  (A)  and  some  samples  for  two  parameter  settings;  Setting  1:small t-shift (B), Setting 2:  large t-shift (C)." style="display: block; margin: auto;" />
+<div class="figure" style="text-align: center">
+
+<img src="toycurve_fig.png" alt="Figure 1. The  ToyCurves  model  (A)  and  some  samples  for  two  parameter  settings;  Setting  1:small t-shift (B), Setting 2:  large t-shift (C)." width="2206" />
+
+<p class="caption">
+
+Figure 1. The ToyCurves model (A) and some samples for two parameter
+settings; Setting 1:small t-shift (B), Setting 2: large t-shift (C).
+
+</p>
+
+</div>
 
 ``` r
 # Triangle function
@@ -178,10 +187,10 @@ for (cl in 1:nbClust)
 ``` r
 Clust_SI <- vector("list",nbClust)
 for (cl in 1:nbClust) {
-  Clust_SI <- tell(gsa, y=u[,cl])
-  plot_indices(Si1=Clust_SI$S[,1], ST=Clust_SI$T[,1], 
-               lowCI_Si1=Clust_SI$S[i,4], upCI_Si1=Clust_SI$S[i,5], 
-               lowCI_ST=Clust_SI$T[i,4], upCI_ST=Clust_SI$T[i,5], 
+  Clust_SI[[cl]] <- tell(gsa, y=u[,cl])
+  plot_indices(Si1=Clust_SI[[cl]]$S[,1], ST=Clust_SI[[cl]]$T[,1], 
+               lowCI_Si1=Clust_SI[[cl]]$S[,4], upCI_Si1=Clust_SI[[cl]]$S[,5], 
+               lowCI_ST=Clust_SI[[cl]]$T[,4], upCI_ST=Clust_SI[[cl]]$T[,5], 
                graph_title=paste0("Cluster",cl))
 }
 ```
@@ -193,13 +202,12 @@ for (cl in 1:nbClust) {
 ``` r
 comb <- combn(nbClust,2) # computes the different combinations of 2 clusters among nbClust
 nbComb <- ncol(comb)
-dClust_SI <- vector("list",nbComb)
 
 for (icomb in 1:nbComb) {
   dClust_SI <- tell(gsa, y=u[,comb[1,icomb]]-u[,comb[2,icomb]])
   plot_indices(Si1=dClust_SI$S[,1], ST=dClust_SI$T[,1], 
-               lowCI_Si1=dClust_SI$S[i,4], upCI_Si1=dClust_SI$S[i,5], 
-               lowCI_ST=dClust_SI$T[i,4], upCI_ST=dClust_SI$T[i,5], 
+               lowCI_Si1=dClust_SI$S[,4], upCI_Si1=dClust_SI$S[,5], 
+               lowCI_ST=dClust_SI$T[,4], upCI_ST=dClust_SI$T[,5], 
                graph_title=paste0("Direction ",comb[1,icomb],"-",comb[2,icomb]))
 }
 ```
@@ -210,10 +218,10 @@ for (icomb in 1:nbComb) {
 
 ``` r
 compute_GSI <- function(V, Si1, ST, paramNames) {
-  # Function that computes GSI indices from a set of Sobol' indices computed for each time-step of a dynamic output
-  # V: vector of variances (one value per time-step)
-  # Si1: data.frame containing the Sobol' main indices per parameter (row) and time-step (column)
-  # ST: data.frame containing the Sobol' total indices per parameter (row) and time-step (column)
+  # Function that computes GSI indices from a set of Sobol' indices computed for multiple variables (e.g. several time-steps of a dynamic output, membership functions for different clusters, ...)
+  # V: vector of variances (one value per variable)
+  # Si1: data.frame containing the Sobol' main indices per parameter (row) and variable (column)
+  # ST: data.frame containing the Sobol' total indices per parameter (row) and variable (column)
 
   clust_GSI <- list(Si1=setNames(sapply(1:nbParam,function(x) sum(V * Si1[x,]) / sum(V)), paramNames),
                     ST=setNames(sapply(1:nbParam,function(x) sum(V * ST[x,]) / sum(V)), paramNames))
@@ -221,17 +229,9 @@ compute_GSI <- function(V, Si1, ST, paramNames) {
 }
 
 # Compute Clust-GSI
-dyn_V <- rep(NA,np)  # V: vector of variances (one value per time-step)
-dyn_Si1 <- data.frame(matrix(nrow=nbParam,ncol=np)) # Sobol' main indices per parameter (row) and time-step (column)
-dyn_T <- data.frame(matrix(nrow=nbParam,ncol=np))   # Sobol' total indices per parameter (row) and time-step (column)
-for (i in 1:np) {
-  gsa$nboot=0 # bootstrap is not necessary at this stage
-  res_tmp <- tell(gsa, y=curves[,i])
-  dyn_V[i]=res_tmp$V[1,1]
-  dyn_Si1[,i] = res_tmp$S[,1]
-  dyn_T[,i] = res_tmp$T[,1]
-}
-clust_GSI <- compute_GSI(dyn_V, dyn_Si1, dyn_T, paramNames)
+clust_GSI <- compute_GSI(sapply(Clust_SI, function(x) x$V[1,1]), 
+                         sapply(Clust_SI, function(x) x$S[,1]), 
+                         sapply(Clust_SI, function(x) x$T[,1]), paramNames)
 
 # Compute confidence intervals on Clust-GSI
 nboot=100
@@ -241,16 +241,16 @@ for (iboot in 1:nboot)
   bt_idx=sample(n,size=n,replace=TRUE) # resample in X1 and X2 matrices
   
   gsa_boot = soboljansen(model = NULL, X1= X1[bt_idx,], X2 = X2[bt_idx,], nboot=0)
-  idx_in_curves = match(data.frame(t(gsa_boot$X)), data.frame(t(gsa$X))) # identify the lines of the bootstrapped DoE, gsa_boot$X, in the original DoE, gsa$X, to reuse the simulated curves
+  idx_in_orig_DoE = match(data.frame(t(gsa_boot$X)), data.frame(t(gsa$X))) # identify the lines of the bootstrapped DoE, gsa_boot$X, in the original DoE, gsa$X, to reuse the simulated curves
   
-  for (i in 1:np)
+  Clust_SI_boot <- vector("list",nbClust)
+  for (cl in 1:nbClust)
   {
-    res_tmp = tell(gsa_boot, y=curves[idx_in_curves,i]) 
-    dyn_V[i]=res_tmp$V[1,1]
-    dyn_Si1[,i] = res_tmp$S[,1]
-    dyn_T[,i] = res_tmp$T[,1]
+    Clust_SI_boot[[cl]] <- tell(gsa, y=u[idx_in_orig_DoE,cl])
   }
-  clust_GSI_boot[[iboot]] <- compute_GSI(dyn_V, dyn_Si1, dyn_T, paramNames)
+  clust_GSI_boot[[iboot]] <- compute_GSI(sapply(Clust_SI_boot, function(x) x$V[1,1]), 
+                                         sapply(Clust_SI_boot, function(x) x$S[,1]), 
+                                         sapply(Clust_SI_boot, function(x) x$T[,1]), paramNames)
   
 }
 

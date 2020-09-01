@@ -160,11 +160,12 @@ represented with a grey level depending on their membership level to a
 given cluster (black = high membership, light grey = low membership).
 
 ``` r
-clust <- FKM(curves,k=nbClust,conv=1e-3, maxit=50)
+m<-2 # fuzziness parameter
+clust <- FKM(curves,k=nbClust,m=m,conv=1e-3, maxit=50)
 u <- clust$U # Membership functions
 centers <- data.frame(matrix(nrow=nbClust,ncol=np)) # clusters' centers
 for (k in 1:nbClust)
-  centers[k,]= apply(curves*(u[,k]^2),2,sum) / sum(u[,k]^2)
+  centers[k,]= apply(curves*(u[,k]^m),2,sum) / sum(u[,k]^m)
 
 # plot (a sub-set of) curves for each cluster
 nc <- 100 # number of curves to plot 

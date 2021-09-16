@@ -1,6 +1,6 @@
 # Code for Cluster-Based GSA method
 
-This repository provides the code of the Cluster-Based GSA method applied on the ToyCurves model as presented in (Roux, Buis et al., submitted to ENVIRON. MODELL. SOFTW.).
+This repository provides the code of the Cluster-Based GSA method applied on the ToyCurves model as presented in [(Roux, Buis et al., 2021)](https://www.sciencedirect.com/science/article/pii/S136481522100089X).
 
 [`clusterBasedGSA_on_Toycurve.md`](https://github.com/sbuis/ClusterBased_GSA/blob/master/clusterBasedGSA_on_Toycurve.md) includes both the R code and its results. We advise to look at it if you want to know how the method is implemented. 
 

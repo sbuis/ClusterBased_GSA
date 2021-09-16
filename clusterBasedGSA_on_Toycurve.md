@@ -6,8 +6,7 @@ S. Roux (INRAE, UMR MISTEA) & S. Buis (INRAE, UMR EMMAH)
 # Introduction
 
 This document provides the code of the Cluster-Based GSA method applied
-on the ToyCurves model as presented in (Roux, Buis et al., submitted to
-ENVIRON. MODELL. SOFTW.)
+on the ToyCurves model as presented in [(Roux, Buis et al., 2021)](https://www.sciencedirect.com/science/article/pii/S136481522100089X)
 
 Main parameters can be changed using the Rstudio “Knit with parameters
 …” menu Bar:
